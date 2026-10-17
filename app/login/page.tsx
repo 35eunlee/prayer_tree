@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [returnTo, setReturnTo] = useState("/");
   const [error, setError] = useState(false);
-  const returnTo = typeof window === "undefined" ? "/" : new URLSearchParams(window.location.search).get("return_to") || "/";
+  useEffect(() => {
+    setReturnTo(new URLSearchParams(window.location.search).get("return_to") || "/");
+  }, []);
   const googleUrl = `/auth/start?return_to=${encodeURIComponent(returnTo)}`;
 
   async function requestLink(event: FormEvent<HTMLFormElement>) {
