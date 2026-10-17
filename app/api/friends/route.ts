@@ -12,7 +12,8 @@ async function createRequest(d: ReturnType<typeof db>, requesterId: string, reci
   if(reverse?.status==="pending") return {error:"request_already_received"};
   const existing=await d.prepare("SELECT status FROM friend_requests WHERE requester_id=? AND recipient_id=?").bind(requesterId,recipientId).first<any>();
   if(existing?.status==="pending") return {error:"request_pending"};
-  await d.prepare("INSERT INTO friend_requests(requester_id,recipient_id,requester_name,recipient_name,status,created_at,responded_at) VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(requester_id,recipient_id) DO UPDATE SET requester_name=excluded.requester_name,recipient_name=excluded.recipient_name,status='pending',created_at=excluded.created_at,responded_at=NULL").bind(requesterId,recipientId,requesterName,recipientName,"pending",now).run();
+  const saved=await d.prepare("INSERT INTO friend_requests(requester_id,recipient_id,requester_name,recipient_name,status,created_at,responded_at) VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(requester_id,recipient_id) DO UPDATE SET requester_name=excluded.requester_name,recipient_name=excluded.recipient_name,status='pending',created_at=excluded.created_at,responded_at=NULL WHERE friend_requests.status!='pending'").bind(requesterId,recipientId,requesterName,recipientName,"pending",now).run();
+  if(!saved.meta.changes) return {error:"request_pending"};
   await notifyUser({recipientId,actorId:requesterId,actorName:requesterName,kind:"friend_request",title:"새 친구 요청이 있어요",message:`${requesterName}님이 친구 요청을 보냈어요.`,link:"friends"});
   return {ok:true};
 }
