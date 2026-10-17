@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 500" fill="none">
+  <defs>
+    <linearGradient id="bark" x1="205" y1="155" x2="225" y2="462" gradientUnits="userSpaceOnUse"><stop stop-color="#9B8765"/><stop offset=".55" stop-color="#806D55"/><stop offset="1" stop-color="#A58F6C"/></linearGradient>
+    <filter id="wash" x="45" y="45" width="330" height="430" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation=".8"/></filter>
+  </defs>
+  <g stroke="url(#bark)" stroke-linecap="round" stroke-linejoin="round" filter="url(#wash)">
+    <path stroke-width="21" d="M210 456c4-65 1-130 0-194-1-69 4-137 0-206"/>
+    <path stroke-width="13" d="M209 340c-31-46-70-82-108-111-21-16-38-35-52-55M210 310c38-40 76-70 115-98 20-14 37-30 50-49M207 248c-30-42-45-84-51-132-2-20-10-38-23-54M210 215c28-47 42-93 47-146 2-20 12-39 28-55M207 374c-38-8-74-5-110 5M211 382c36-12 71-16 108-13"/>
+    <path stroke-width="7" d="M105 232c-1-31-14-53-34-72M116 242c-26-4-47-1-67 8M310 216c3-27 17-47 39-64M302 227c25-3 46 1 66 12M156 117c-19-17-31-36-35-59M253 91c19-20 29-39 32-61M98 379c-18 4-34 13-48 28M319 369c17 0 33 7 49 19"/>
+  </g>
+  <g opacity=".18" stroke="#D4C2A0" stroke-linecap="round"><path stroke-width="4" d="M208 446c5-93-3-178 2-267M101 220c29 29 59 54 89 92M310 208c-30 24-57 48-83 78"/></g>
+</svg>

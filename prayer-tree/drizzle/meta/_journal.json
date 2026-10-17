@@ -1,0 +1,83 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1791999727067,
+      "tag": "0000_mean_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792002782438,
+      "tag": "0001_sticky_vanisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792006073335,
+      "tag": "0002_friends_group_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792007180386,
+      "tag": "0003_friend_approval_group_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792010000000,
+      "tag": "0004_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792160000000,
+      "tag": "0005_prayer_categories_letter_tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792163000000,
+      "tag": "0006_group_intercessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792170000000,
+      "tag": "0007_sermons",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792173000000,
+      "tag": "0008_group_intercession_waters",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792176000000,
+      "tag": "0009_record_kinds",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792250000000,
+      "tag": "0010_sermon_friend_targets",
+      "breakpoints": true
+    }
+  ]
+}
