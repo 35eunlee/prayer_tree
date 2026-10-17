@@ -51,6 +51,9 @@
 .letter-verse,.letter-note,.letter-ref,.letter-history-reference,.letter-history-note,.letter-reply-note,.sermon-detail h4,.sermon-detail-scripture,.sermon-detail-content{overflow-wrap:anywhere;word-break:keep-all}
 .letter-paper{overflow-wrap:anywhere}
 @media(max-width:600px){.letter-room{grid-template-columns:minmax(0,1fr);gap:8px}.letter-display{border-left:0;border-top:1px solid #e5e3d8;padding:12px 0 0;overflow:visible}.letter-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.letter-actions button{min-height:44px}.sermon-detail-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.sermon-detail-actions button{min-width:0;white-space:normal;overflow-wrap:anywhere}}
+
+/* Mobile letter controls stack, with the write action below the draw action. */
+@media(max-width:600px){.letter-head p br{display:block}.letter-actions{grid-template-columns:minmax(0,1fr)}.letter-actions button{width:100%}.letter-actions #myLettersBtn{grid-column:auto;justify-self:stretch;width:100%}}
 </style></head>
 <body><div class="shell">
 <header class="topbar"><div class="brand">기도나무</div><div class="topdate" id="today"></div><div class="top-actions"><button class="small-btn notification-button" id="notificationBtn" type="button" aria-label="알림함">🔔<span class="notification-dot"></span></button><button class="small-btn" id="settingsBtn" type="button">설정</button><button class="small-btn" id="logoutBtn" type="button">로그아웃</button><button class="small-btn" id="helpBtn" type="button">도움말</button></div></header>
