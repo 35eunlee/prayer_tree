@@ -189,6 +189,11 @@ export function sites({ mockAuth = true } = {}): Plugin {
         await cp(drizzleSource, resolve(outputDirectory, "drizzle"), {
           recursive: true,
         });
+        // Wrangler resolves migrations_dir relative to dist/server/wrangler.json.
+        // Keep a copy beside that generated config for Cloudflare deployments.
+        await cp(drizzleSource, resolve(root, "dist", "server", "drizzle"), {
+          recursive: true,
+        });
       }
     },
   };
