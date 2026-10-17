@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -10,7 +10,7 @@ export default function LoginPage() {
   const returnTo = typeof window === "undefined" ? "/" : new URLSearchParams(window.location.search).get("return_to") || "/";
   const googleUrl = `/auth/start?return_to=${encodeURIComponent(returnTo)}`;
 
-  async function requestLink(event: React.FormEvent<HTMLFormElement>) {
+  async function requestLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
