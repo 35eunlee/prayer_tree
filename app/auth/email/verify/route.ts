@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   if (!consume.meta?.changes) return new Response("로그인 링크가 이미 사용되었거나 만료되었습니다. 다시 요청해 주세요.", { status: 400, headers: { "Cache-Control": "no-store" } });
 
   const email = challenge.email.toLowerCase();
-  const proposedUserId = `email:${email}`;
+  const proposedUserId = `email:${crypto.randomUUID()}`;
   await env.DB.prepare("INSERT INTO email_identities (email, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(email) DO NOTHING").bind(email, proposedUserId, now).run();
   const identity = await env.DB.prepare("SELECT user_id FROM email_identities WHERE email = ?").bind(email).first<{ user_id: string }>();
   if (!identity) return new Response("계정 정보를 저장하지 못했습니다. 다시 시도해 주세요.", { status: 503 });
