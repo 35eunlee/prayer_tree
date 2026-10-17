@@ -8,7 +8,7 @@ async function hashToken(token: string) {
 }
 
 function page(token: string, status = 200) {
-  return new Response(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>기도나무 로그인</title><body style="margin:0;background:#f8f7ef;color:#315449;font:17px sans-serif;display:grid;min-height:100vh;place-items:center"><main style="max-width:420px;margin:24px;padding:32px;background:#fffefa;border-radius:20px;text-align:center"><h1>기도나무 로그인</h1><p>이메일 주소를 확인했어요. 아래 버튼을 누르면 로그인됩니다.</p><form method="post"><input type="hidden" name="token" value="${token}"><button style="padding:14px 24px;border:0;border-radius:12px;background:#4e8171;color:white;font-size:16px">로그인하고 기도나무 열기</button></form><p style="color:#839087;font-size:14px">링크는 한 번만 사용할 수 있으며 10분 후 만료돼요.</p></main></body></html>`, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" } });
+  return new Response(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>기도나무 로그인</title><body style="margin:0;background:#f8f7ef;color:#315449;font:17px sans-serif;display:grid;min-height:100vh;place-items:center"><main style="max-width:420px;margin:24px;padding:32px;background:#fffefa;border-radius:20px;text-align:center"><h1>기도나무 로그인</h1><p>이메일 주소를 확인했어요. 아래 버튼을 누르면 로그인됩니다.</p><form method="post"><input type="hidden" name="token" value="${token}"><button style="padding:14px 24px;border:0;border-radius:12px;background:#4e8171;color:white;font-size:16px">로그인하고 기도나무 열기</button></form><p style="color:#839087;font-size:14px">링크는 한 번만 사용할 수 있으며 10분 후 만료돼요.</p></main></body></html>`, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" } });
 }
 
 export async function GET(request: Request) {
@@ -40,5 +40,7 @@ export async function POST(request: Request) {
   const session = await signPayload({ userId: identity.user_id, email, fullName: email, exp: now + 30 * 24 * 60 * 60 * 1000 });
   const response = NextResponse.redirect(new URL(safeReturnPath(challenge.return_to), request.url), 303);
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session}; ${cookieOptions(request, 30 * 24 * 60 * 60)}`);
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
   return response;
 }
