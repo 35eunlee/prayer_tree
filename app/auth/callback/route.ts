@@ -22,7 +22,29 @@ export async function GET(request: Request) {
   const profile = await profileResponse.json() as GoogleUser;
   if (!profile.sub || !profile.email || !profile.email_verified) return new Response("인증된 Google 이메일 계정만 사용할 수 있습니다.", { status: 403 });
 
-  const session = await signPayload({ userId: `google:${profile.sub}`, email: profile.email, fullName: profile.name || profile.email, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+  if (!env.DB) return new Response("계정 저장소 설정이 완료되지 않았습니다.", { status: 503 });
+  const email = profile.email.trim().toLowerCase();
+  const now = Date.now();
+  const googleIdentity = await env.DB.prepare("SELECT user_id FROM google_identities WHERE subject = ?").bind(profile.sub).first<{ user_id: string }>();
+  const emailIdentity = await env.DB.prepare("SELECT user_id FROM email_identities WHERE email = ?").bind(email).first<{ user_id: string }>();
+  if (googleIdentity && emailIdentity && googleIdentity.user_id !== emailIdentity.user_id) {
+    return new Response("이 이메일 주소가 서로 다른 계정에 연결되어 있어 로그인을 완료하지 못했습니다. 기존 계정으로 로그인해 주세요.", { status: 409 });
+  }
+  let userId = googleIdentity?.user_id || emailIdentity?.user_id || `google:${profile.sub}`;
+  await env.DB.prepare("INSERT INTO email_identities (email, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(email) DO NOTHING").bind(email, userId, now).run();
+  const savedEmailIdentity = await env.DB.prepare("SELECT user_id FROM email_identities WHERE email = ?").bind(email).first<{ user_id: string }>();
+  if (!savedEmailIdentity) return new Response("계정 연결을 저장하지 못했습니다. 다시 시도해 주세요.", { status: 503 });
+  if (googleIdentity && googleIdentity.user_id !== savedEmailIdentity.user_id) {
+    return new Response("이 이메일 주소가 서로 다른 계정에 연결되어 있어 로그인을 완료하지 못했습니다. 기존 계정으로 로그인해 주세요.", { status: 409 });
+  }
+  userId = savedEmailIdentity.user_id;
+  await env.DB.prepare("INSERT INTO google_identities (subject, email, user_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(subject) DO NOTHING").bind(profile.sub, email, userId, now).run();
+  const savedGoogleIdentity = await env.DB.prepare("SELECT user_id FROM google_identities WHERE subject = ?").bind(profile.sub).first<{ user_id: string }>();
+  if (!savedGoogleIdentity || savedGoogleIdentity.user_id !== userId) {
+    return new Response("Google 계정 연결을 확인하지 못했습니다. 기존 로그인 방식을 사용해 주세요.", { status: 409 });
+  }
+
+  const session = await signPayload({ userId, email, fullName: profile.name || email, exp: now + 30 * 24 * 60 * 60 * 1000 });
   const response = NextResponse.redirect(new URL(safeReturnPath(saved.returnTo), url));
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session}; ${cookieOptions(request, 30 * 24 * 60 * 60)}`);
   response.headers.append("Set-Cookie", `prayer_tree_oauth=; ${cookieOptions(request, 0)}`);
