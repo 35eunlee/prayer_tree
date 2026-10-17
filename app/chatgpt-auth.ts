@@ -27,7 +27,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     const request = new Request("https://session.local", { headers: { cookie: requestHeaders.get("cookie") || "" } });
     const token = getCookie(request, SESSION_COOKIE);
     const session = token ? await verifyPayload<GoogleSession>(token) : null;
-    if (!session || session.exp < Date.now() || !session.userId.startsWith("google:") || !session.email) return null;
+    if (!session || session.exp < Date.now() || !session.userId.startsWith("google:") && !session.userId.startsWith("email:") || !session.email) return null;
     return { userId: session.userId, email: session.email, displayName: session.fullName || session.email, fullName: session.fullName || null };
   }
 
