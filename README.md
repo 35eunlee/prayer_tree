@@ -1,6 +1,6 @@
 # vinext-starter
 
-## Public deployment with Google sign-in
+## Public deployment with Google and email sign-in
 
 This application can be deployed as a Cloudflare Worker with a Cloudflare D1 database. GitHub Pages is not suitable because the app uses server routes, sessions, and D1. A new Cloudflare deployment has its own database and user IDs; it does not automatically import data from the ChatGPT-hosted Site.
 
@@ -11,9 +11,10 @@ This application can be deployed as a Cloudflare Worker with a Cloudflare D1 dat
 3. Add the build variable `D1_DATABASE_ID` with the database ID from step 1. The Vite build writes this ID into the generated Worker configuration and points D1 migrations at `drizzle/`.
 4. Create a Google OAuth 2.0 Web application in Google Cloud Console. Add the Worker URL plus `/auth/callback` as an authorized redirect URI, for example `https://your-worker.workers.dev/auth/callback`.
 5. In Worker settings, add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `SESSION_SECRET` as runtime variables/secrets. Generate `SESSION_SECRET` as a random value with at least 32 characters. Keep the client secret and session secret private; never commit them to GitHub.
-6. Push to the connected production branch. Workers Builds will build and deploy on each push. The deploy command applies pending D1 migrations before deployment.
+6. For email sign-in, create a Resend account, verify the sending domain/address, then set `RESEND_API_KEY` and `EMAIL_FROM` as Worker runtime secrets/variables. `EMAIL_FROM` must be an authorized sender for that Resend account. The app sends a single-use login link that expires in 10 minutes. Without these settings, Google sign-in continues to work and the email option reports that setup is incomplete.
+7. Push to the connected production branch. Workers Builds will build and deploy on each push. The deploy command applies pending D1 migrations before deployment.
 
-Google users must have a verified email. Sessions are stored in a signed, HTTP-only cookie for 30 days. D1 records are keyed by Google's stable account subject, so the same Google account sees the same records across devices on this deployment.
+Google users must have a verified email. Sessions are stored in a signed, HTTP-only cookie for 30 days. The existing Google subject remains the user ID, and the migration records a verified email-to-user mapping without rewriting prayer, friend, or group records. Existing Google users should sign in with Google once after deployment so the mapping is registered before using email sign-in; subsequent email sign-ins on the same verified address will open that same account. New email accounts use a normalized email identity. Google and email identities are linked only when their verified email addresses match; conflicting mappings stop sign-in instead of merging accounts.
 
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
 
