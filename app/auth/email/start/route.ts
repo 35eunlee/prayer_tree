@@ -21,8 +21,10 @@ export async function POST(request: Request) {
   if (email.length > 254 || !emailPattern.test(email)) return json({ error: "올바른 이메일 주소를 입력해 주세요." }, 400);
 
   const now = Date.now();
+  await env.DB.prepare("DELETE FROM email_magic_links WHERE expires_at <= ?").bind(now).run();
   const recent = await env.DB.prepare("SELECT COUNT(*) AS count FROM email_magic_links WHERE email = ? AND created_at > ?").bind(email, now - 10 * 60 * 1000).first<{ count: number }>();
-  if ((recent?.count || 0) >= 3 || (recent?.count || 0) > 0 && (await env.DB.prepare("SELECT COUNT(*) AS count FROM email_magic_links WHERE email = ? AND created_at > ?").bind(email, now - 60 * 1000).first<{ count: number }>())?.count) {
+  const lastMinute = await env.DB.prepare("SELECT COUNT(*) AS count FROM email_magic_links WHERE email = ? AND created_at > ?").bind(email, now - 60 * 1000).first<{ count: number }>();
+  if ((recent?.count || 0) >= 3 || (lastMinute?.count || 0) >= 1) {
     return json({ ok: true, message: "요청이 가능하다면 로그인 링크를 이메일로 보냈습니다. 받은 편지함을 확인해 주세요." });
   }
 
