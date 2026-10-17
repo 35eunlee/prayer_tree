@@ -1,9 +1,9 @@
-import { db, json, requireUser } from "@/lib/server";
+import { db, json, requireUser, todaySeoul } from "@/lib/server";
 export const dynamic="force-dynamic";
 export async function GET(request:Request){
   const u=await requireUser();if(!u)return json({error:"sign_in_required"},401);
   const groupId=new URL(request.url).searchParams.get("groupId");
-  const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),d=db();
+  const day=todaySeoul(),d=db();
   const rows=await d.prepare(`SELECT DISTINCT s.id,s.owner_id,s.tree_id,s.owner_name,s.body,s.fruit,s.visibility,s.group_ids_json,s.friend_shared,s.friend_ids_json,s.category,s.harvested,s.created_at,
    (SELECT COUNT(*) FROM waters w WHERE w.owner_id=s.owner_id AND w.prayer_id=substr(s.id,instr(s.id,':')+1)) AS water_count,
    EXISTS(SELECT 1 FROM waters w WHERE w.owner_id=s.owner_id AND w.prayer_id=substr(s.id,instr(s.id,':')+1) AND w.user_id=? AND w.day=?) AS watered_today
