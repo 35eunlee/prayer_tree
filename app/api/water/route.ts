@@ -16,7 +16,9 @@ export async function GET(request:Request){
   const rows=await d.prepare("SELECT user_id,display_name,COUNT(*) AS prayer_count FROM waters WHERE owner_id=? AND prayer_id=? GROUP BY user_id,display_name ORDER BY MIN(created_at) ASC").bind(u.userId,prayerId).all<any>();
   const people=(rows.results||[]).map((row:any)=>({userId:String(row.user_id),displayName:String(row.display_name||"함께 기도한 이웃"),prayerCount:Number(row.prayer_count||0)}));
   const total=people.reduce((sum:any,person:any)=>sum+person.prayerCount,0);
-  return json({ok:true,prayerCount:total,peopleCount:people.length,people});
+  const sharedTotal=people.filter((person:any)=>person.userId!==u.userId).reduce((sum:any,person:any)=>sum+person.prayerCount,0);
+  const days=await d.prepare("SELECT COUNT(DISTINCT day) AS day_count FROM waters WHERE owner_id=? AND prayer_id=?").bind(u.userId,prayerId).first<any>();
+  return json({ok:true,prayerCount:total,sharedPrayerCount:sharedTotal,wateringDays:Number(days?.day_count||0),peopleCount:people.length,people});
 }
 
 export async function POST(request:Request){
