@@ -2,6 +2,23 @@ import { body, db, isoNow, json, requireUser, sameOrigin, todaySeoul } from "@/l
 import { notifyUser } from "@/lib/notifications";
 export const dynamic="force-dynamic";
 
+export async function GET(request:Request){
+  const u=await requireUser();
+  if(!u)return json({error:"sign_in_required"},401);
+  const prayerId=new URL(request.url).searchParams.get("prayerId")||"";
+  if(!prayerId)return json({error:"invalid_prayer"},400);
+  const d=db();
+  const stateRow=await d.prepare("SELECT state_json FROM user_states WHERE user_id=?").bind(u.userId).first<any>();
+  let state:any=null;
+  try{state=JSON.parse(String(stateRow?.state_json||"null"))}catch{}
+  const ownsPrayer=(state?.trees||[]).some((tree:any)=>(tree.prayers||[]).some((prayer:any)=>String(prayer.id)===prayerId));
+  if(!ownsPrayer)return json({error:"prayer_not_found"},404);
+  const rows=await d.prepare("SELECT user_id,display_name,COUNT(*) AS prayer_count FROM waters WHERE owner_id=? AND prayer_id=? GROUP BY user_id,display_name ORDER BY MIN(created_at) ASC").bind(u.userId,prayerId).all<any>();
+  const people=(rows.results||[]).map((row:any)=>({userId:String(row.user_id),displayName:String(row.display_name||"함께 기도한 이웃"),prayerCount:Number(row.prayer_count||0)}));
+  const total=people.reduce((sum:any,person:any)=>sum+person.prayerCount,0);
+  return json({ok:true,prayerCount:total,peopleCount:people.length,people});
+}
+
 export async function POST(request:Request){
   if(!(await sameOrigin(request)))return json({error:"bad_origin"},403);
   const u=await requireUser();
