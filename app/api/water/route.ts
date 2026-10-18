@@ -12,9 +12,16 @@ export async function POST(request:Request){
   if(!ownerId||!prayerId)return json({error:"invalid_prayer"},400);
   const d=db();
   // Resolve shared prayers by their canonical row ID; UI owner metadata can be stale.
-  const p=sharedId
-    ? await d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE id=?").bind(sharedId).first<any>()
-    : await d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE id=? AND owner_id=?").bind(`${ownerId}:${prayerId}`,ownerId).first<any>();
+  const selectPrayer=(id:string)=>d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE id=?").bind(id).first<any>();
+  let p=sharedId?await selectPrayer(sharedId):null;
+  // If an old or stale client sends a noncanonical shared ID, try the
+  // owner/prayer pair too before reporting that the prayer is missing.
+  if(!p)p=await selectPrayer(`${ownerId}:${prayerId}`);
+  if(!p&&sharedId.includes(":")){
+    const separator=sharedId.indexOf(":");
+    const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
+    if(sharedOwner&&sharedPrayer)p=await selectPrayer(`${sharedOwner}:${sharedPrayer}`);
+  }
   if(p){
     ownerId=String(p.owner_id);
     prayerId=String(p.id).slice(String(p.id).indexOf(":")+1);
