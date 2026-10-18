@@ -22,11 +22,38 @@ export async function POST(request:Request){
     const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
     if(sharedOwner&&sharedPrayer)p=await selectPrayer(`${sharedOwner}:${sharedPrayer}`);
   }
+  if(!p&&sharedId.includes(":")){
+    const separator=sharedId.indexOf(":");
+    const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
+    if(sharedOwner&&sharedPrayer){ownerId=sharedOwner;prayerId=sharedPrayer}
+  }
   if(p){
     ownerId=String(p.owner_id);
     prayerId=String(p.id).slice(String(p.id).indexOf(":")+1);
-  }else if(ownerId!==u.userId){
-    return json({error:"prayer_not_found"},404);
+  }
+  // A shared prayer may briefly be absent from the projection table while its
+  // owner state is being refreshed. Recover its share rules from the saved state.
+  if(!p&&ownerId!==u.userId){
+    const stateRow=await d.prepare("SELECT state_json FROM user_states WHERE user_id=?").bind(ownerId).first<any>();
+    let state:any=null;
+    try{state=JSON.parse(String(stateRow?.state_json||"null"))}catch{}
+    let savedPrayer:any=null;
+    for(const tree of state?.trees||[]){
+      savedPrayer=(tree.prayers||[]).find((item:any)=>String(item.id)===prayerId);
+      if(savedPrayer)break;
+    }
+    if(!savedPrayer)return json({error:"prayer_not_found"},404);
+    const groupIds=Array.isArray(savedPrayer.groupIds)?savedPrayer.groupIds:[];
+    const friendIds=Array.isArray(savedPrayer.friendIds)?savedPrayer.friendIds:[];
+    const savedVisibility=String(savedPrayer.visibility||"");
+    const friendShared=!!savedPrayer.friendShared||savedVisibility==="friends";
+    p={
+      owner_id:ownerId,
+      visibility:groupIds.length?(friendShared||friendIds.length?"friends_groups":"groups"):(friendShared||friendIds.length?"friends":"private"),
+      group_ids_json:JSON.stringify(groupIds),
+      friend_ids_json:JSON.stringify(friendIds),
+      friend_shared:friendShared?1:0
+    };
   }
   let allowed=ownerId===u.userId;
   if(!allowed&&p&&(p.visibility==="groups"||p.visibility==="friends_groups")){
