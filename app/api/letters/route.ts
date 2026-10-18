@@ -24,6 +24,16 @@ export async function POST(request:Request){
     await d.prepare("INSERT INTO letter_replies(id,letter_id,recipient_id,author_id,author_name,anonymous,body,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,letterId,u.userId,u.userId,authorName,anonymous,text,now).run();
     await notifyUser({recipientId:letter.author_id,actorId:u.userId,actorName:"익명",kind:"letter_reply",title:"받은 편지에 답장이 왔어요",message:"편지에 따뜻한 답장이 도착했어요.",link:"letters"});return json({ok:true,id});
   }
+  if(action==="reply_update"){
+    const id=String(b.id||""),text=String(b.body||"").trim();if(!id||!text||text.length>600)return json({error:"invalid_reply"},400);
+    const r=await d.prepare("UPDATE letter_replies SET body=? WHERE id=? AND author_id=?").bind(text,id,u.userId).run();
+    return r.meta.changes?json({ok:true}):json({error:"reply_not_found"},404);
+  }
+  if(action==="reply_delete"){
+    const id=String(b.id||"");if(!id)return json({error:"invalid_reply"},400);
+    const r=await d.prepare("DELETE FROM letter_replies WHERE id=? AND author_id=?").bind(id,u.userId).run();
+    return r.meta.changes?json({ok:true}):json({error:"reply_not_found"},404);
+  }
   if(action==="update"){
     const id=String(b.id||""),reference=String(b.reference||"").trim(),verse=String(b.verse||"").trim(),note=String(b.note||"").trim();if(!id||!reference||!verse||!note||reference.length>100||verse.length>1000||note.length>700)return json({error:"invalid_letter"},400);
     const r=await d.prepare("UPDATE letters SET author_name=?,anonymous=?,reference=?,verse=?,note=? WHERE id=? AND author_id=?").bind("익명",1,reference,verse,note,id,u.userId).run();return r.meta.changes?json({ok:true}):json({error:"letter_not_found"},404);
