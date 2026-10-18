@@ -27,6 +27,25 @@ export async function POST(request:Request){
     const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
     if(sharedOwner&&sharedPrayer){ownerId=sharedOwner;prayerId=sharedPrayer}
   }
+  if(!p){
+    // Older group cards may send the tree ID where the account ID is expected.
+    // Resolve by prayer ID only when this user can already view the matching share.
+    const matches=await d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE substr(id,instr(id,':')+1)=? LIMIT 50").bind(prayerId).all<any>();
+    for(const candidate of matches.results||[]){
+      const candidateOwner=String(candidate.owner_id);
+      let visible=candidateOwner===u.userId;
+      if(!visible&&(candidate.visibility==="groups"||candidate.visibility==="friends_groups")){
+        for(const id of JSON.parse(candidate.group_ids_json||"[]")){
+          if(await d.prepare("SELECT 1 FROM group_members WHERE group_id=? AND user_id=?").bind(id,u.userId).first()){visible=true;break}
+        }
+      }
+      if(!visible&&(candidate.visibility==="friends"||candidate.visibility==="friends_groups")&&
+        (candidate.friend_shared||(candidate.visibility==="friends"&&!JSON.parse(candidate.friend_ids_json||"[]").length)||JSON.parse(candidate.friend_ids_json||"[]").includes(u.userId))){
+        visible=!!(await d.prepare("SELECT 1 FROM friends WHERE user_id=? AND friend_id=?").bind(u.userId,candidateOwner).first());
+      }
+      if(visible){p=candidate;break}
+    }
+  }
   if(p){
     ownerId=String(p.owner_id);
     prayerId=String(p.id).slice(String(p.id).indexOf(":")+1);
