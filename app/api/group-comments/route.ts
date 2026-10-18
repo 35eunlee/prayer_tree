@@ -1,7 +1,7 @@
 import { body, db, isoNow, json, requireUser, sameOrigin } from "@/lib/server";
 import { notifyUser } from "@/lib/notifications";
 export const dynamic="force-dynamic";
-async function visiblePrayer(groupId:string,prayerId:string){return await db().prepare("SELECT owner_id FROM shared_prayers p WHERE p.id=? AND p.visibility='groups' AND EXISTS(SELECT 1 FROM json_each(p.group_ids_json) j WHERE j.value=?)").bind(prayerId,groupId).first<any>()}
+async function visiblePrayer(groupId:string,prayerId:string){return await db().prepare("SELECT owner_id FROM shared_prayers p WHERE p.id=? AND p.visibility IN ('groups','friends_groups') AND EXISTS(SELECT 1 FROM json_each(p.group_ids_json) j WHERE j.value=?)").bind(prayerId,groupId).first<any>()}
 export async function GET(request:Request){
   const u=await requireUser();if(!u)return json({error:"sign_in_required"},401);const url=new URL(request.url),groupId=url.searchParams.get("groupId")||"",prayerId=url.searchParams.get("prayerId")||"",d=db();
   if(!groupId||!prayerId)return json({error:"missing_target"},400);const prayer=await visiblePrayer(groupId,prayerId);if(!prayer)return json({error:"prayer_not_visible"},404);
