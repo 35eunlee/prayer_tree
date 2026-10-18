@@ -1,4 +1,4 @@
-import { db, json, requireUser, body, sameOrigin, isoNow, isGroupMember } from "@/lib/server";
+import { db, json, requireUser, body, sameOrigin, isoNow, isGroupMember, todaySeoul } from "@/lib/server";
 export const dynamic="force-dynamic";
 
 export async function GET() {
@@ -6,9 +6,10 @@ export async function GET() {
   const d=db(); const row=await d.prepare("SELECT state_json FROM user_states WHERE user_id=?").bind(u.userId).first<{state_json:string}>();
   if(!row)return json({state:null,displayName:u.fullName||u.email,userId:u.userId});
   let state:any; try{state=JSON.parse(row.state_json)}catch{return json({error:"stored_state_invalid"},500)}
-  const waterRows=await d.prepare("SELECT prayer_id,user_id,display_name,created_at FROM waters WHERE owner_id=? ORDER BY created_at").bind(u.userId).all<any>();
-  const grouped=new Map<string,any[]>(); for(const w of waterRows.results||[]){const a=grouped.get(w.prayer_id)||[];a.push({userId:w.user_id,name:w.display_name,at:w.created_at});grouped.set(w.prayer_id,a)}
-  for(const t of state.trees||[])for(const p of t.prayers||[])p.waters=grouped.get(p.id)||[];
+  const waterRows=await d.prepare("SELECT prayer_id,user_id,display_name,day,created_at FROM waters WHERE owner_id=? ORDER BY created_at").bind(u.userId).all<any>();
+  const grouped=new Map<string,any[]>(); for(const w of waterRows.results||[]){const a=grouped.get(w.prayer_id)||[];a.push({userId:w.user_id,name:w.display_name,day:w.day,at:w.created_at});grouped.set(w.prayer_id,a)}
+  const today=todaySeoul();
+  for(const t of state.trees||[])for(const p of t.prayers||[]){p.waters=grouped.get(p.id)||[];p.watersCount=p.waters.length;p.wateredToday=p.waters.some((w:any)=>w.userId===u.userId&&w.day===today)}
   return json({state,displayName:u.fullName||u.email,userId:u.userId});
 }
 
