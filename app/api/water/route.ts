@@ -16,21 +16,26 @@ export async function POST(request:Request){
   let p=sharedId?await selectPrayer(sharedId):null;
   // If an old or stale client sends a noncanonical shared ID, try the
   // owner/prayer pair too before reporting that the prayer is missing.
-  if(!p)p=await selectPrayer(`${ownerId}:${prayerId}`);
+  const prayerKey=prayerId.slice(prayerId.lastIndexOf(":")+1);
+  if(!p)p=await selectPrayer(`${ownerId}:${prayerKey}`);
+  if(!p&&sharedId.startsWith(`${ownerId}:`)){
+    const suffix=sharedId.slice(ownerId.length+1);
+    p=await selectPrayer(`${ownerId}:${suffix.slice(suffix.lastIndexOf(":")+1)}`);
+  }
   if(!p&&sharedId.includes(":")){
-    const separator=sharedId.indexOf(":");
+    const separator=sharedId.lastIndexOf(":");
     const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
     if(sharedOwner&&sharedPrayer)p=await selectPrayer(`${sharedOwner}:${sharedPrayer}`);
   }
   if(!p&&sharedId.includes(":")){
-    const separator=sharedId.indexOf(":");
+    const separator=sharedId.lastIndexOf(":");
     const sharedOwner=sharedId.slice(0,separator),sharedPrayer=sharedId.slice(separator+1);
     if(sharedOwner&&sharedPrayer){ownerId=sharedOwner;prayerId=sharedPrayer}
   }
   if(!p){
     // Older group cards may send the tree ID where the account ID is expected.
     // Resolve by prayer ID only when this user can already view the matching share.
-    const matches=await d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE substr(id,instr(id,':')+1)=? LIMIT 50").bind(prayerId).all<any>();
+    const matches=await d.prepare("SELECT id,owner_id,visibility,group_ids_json,friend_shared,friend_ids_json FROM shared_prayers WHERE substr(id,length(owner_id)+2)=? LIMIT 50").bind(prayerKey).all<any>();
     for(const candidate of matches.results||[]){
       const candidateOwner=String(candidate.owner_id);
       let visible=candidateOwner===u.userId;
@@ -48,7 +53,7 @@ export async function POST(request:Request){
   }
   if(p){
     ownerId=String(p.owner_id);
-    prayerId=String(p.id).slice(String(p.id).indexOf(":")+1);
+    prayerId=String(p.id).slice(String(p.owner_id).length+1);
   }
   // A shared prayer may briefly be absent from the projection table while its
   // owner state is being refreshed. Recover its share rules from the saved state.
@@ -58,7 +63,7 @@ export async function POST(request:Request){
     try{state=JSON.parse(String(stateRow?.state_json||"null"))}catch{}
     let savedPrayer:any=null;
     for(const tree of state?.trees||[]){
-      savedPrayer=(tree.prayers||[]).find((item:any)=>String(item.id)===prayerId);
+      savedPrayer=(tree.prayers||[]).find((item:any)=>String(item.id)===prayerKey);
       if(savedPrayer)break;
     }
     if(!savedPrayer)return json({error:"prayer_not_found"},404);
