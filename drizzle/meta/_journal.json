@@ -99,6 +99,13 @@
       "when": 1792440000000,
       "tag": "0013_scripture_anonymity",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1792452000000,
+      "tag": "0014_scripture_meditation_visibility",
+      "breakpoints": true
     }
   ]
 }

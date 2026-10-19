@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       chapterRow=await d.prepare("SELECT id,book_id AS bookId,book_name AS bookName,chapter,scripture_text AS scriptureText,CASE WHEN is_anonymous=1 THEN '익명' ELSE creator_name END AS creatorName,created_at AS createdAt FROM scripture_chapters WHERE scope_type=? AND scope_id=? AND book_id=? AND chapter=?").bind(databaseScopeType(scope),scope.id,bookId,chapterNo).first();
     }
     if(chapterRow){
-      const rows=await d.prepare("SELECT id,CASE WHEN is_anonymous=1 THEN '익명' ELSE author_name END AS authorName,body,is_seed AS isSeed,is_anonymous AS isAnonymous,CASE WHEN user_id=? THEN 1 ELSE 0 END AS canDelete,created_at AS createdAt FROM scripture_meditations WHERE chapter_id=? ORDER BY created_at,id").bind(u.userId,chapterRow.id).all<any>();
+      const rows=await d.prepare("SELECT id,CASE WHEN is_anonymous=1 THEN '익명' ELSE author_name END AS authorName,body,is_seed AS isSeed,is_anonymous AS isAnonymous,visibility,CASE WHEN user_id=? THEN 1 ELSE 0 END AS canDelete,created_at AS createdAt FROM scripture_meditations WHERE chapter_id=? AND (visibility='inherit' OR user_id=?) ORDER BY created_at,id").bind(u.userId,chapterRow.id,u.userId).all<any>();
       meditations=rows.results||[];
       if(scope.type==="friends"){
         const access=await d.prepare(`SELECT a.user_id AS userId,COALESCE(NULLIF(fa.alias,''),NULLIF(f.friend_name,''),'친구') AS name
@@ -107,10 +107,10 @@ export async function POST(request: Request) {
       if((friends.results||[]).length!==recipients.length)return json({error:"select_friends_only"},400);
     }
     const chapterId=crypto.randomUUID(),noteId=crypto.randomUUID(),now=isoNow();
-    const anonymous=!!data.anonymous,author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
+    const anonymous=!!data.anonymous,visibility=data.visibility==="private"?"private":"inherit",author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
     const statements=[
       d.prepare("INSERT INTO scripture_chapters (id,scope_type,scope_id,book_id,book_name,chapter,scripture_text,created_by,creator_name,is_anonymous,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(chapterId,databaseScopeType(scope),scope.id,bookId,book.name,chapter,scripture,u.userId,author,anonymous?1:0,now,now),
-      d.prepare("INSERT INTO scripture_meditations (id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,created_at) VALUES (?,?,?,?,?,1,?,?)").bind(noteId,chapterId,u.userId,author,meditation,anonymous?1:0,now),
+      d.prepare("INSERT INTO scripture_meditations (id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,visibility,created_at) VALUES (?,?,?,?,?,1,?,?,?)").bind(noteId,chapterId,u.userId,author,meditation,anonymous?1:0,visibility,now),
       ...recipients.map(userId=>d.prepare("INSERT INTO scripture_chapter_access (chapter_id,user_id,created_at) VALUES (?,?,?)").bind(chapterId,userId,now))
     ];
     try{await d.batch(statements)}catch(error){
@@ -135,9 +135,18 @@ export async function POST(request: Request) {
       chapter=await d.prepare("SELECT id FROM scripture_chapters WHERE id=? AND scope_type=? AND scope_id=?").bind(chapterId,databaseScopeType(scope),scope.id).first();
     }
     if(!chapter)return json({error:"chapter_not_found"},404);
-    const id=crypto.randomUUID(),now=isoNow(),anonymous=!!data.anonymous,author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
-    await d.prepare("INSERT INTO scripture_meditations (id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,created_at) VALUES (?,?,?,?,?,0,?,?)").bind(id,chapterId,u.userId,author,meditation,anonymous?1:0,now).run();
+    const id=crypto.randomUUID(),now=isoNow(),anonymous=!!data.anonymous,visibility=data.visibility==="private"?"private":"inherit",author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
+    await d.prepare("INSERT INTO scripture_meditations (id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,visibility,created_at) VALUES (?,?,?,?,?,0,?,?,?)").bind(id,chapterId,u.userId,author,meditation,anonymous?1:0,visibility,now).run();
     return json({ok:true,id});
+  }
+  if(action==="editMeditation"){
+    const id=String(data.id||""),text=String(data.body||"").trim(),visibility=data.visibility==="private"?"private":"inherit";
+    if(!id||text.length<2||text.length>3000)return json({error:"invalid_meditation"},400);
+    const note=await d.prepare("SELECT user_id AS userId FROM scripture_meditations WHERE id=?").bind(id).first<any>();
+    if(!note)return json({error:"not_found"},404);if(note.userId!==u.userId)return json({error:"forbidden"},403);
+    const author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
+    await d.prepare("UPDATE scripture_meditations SET body=?,author_name=?,is_anonymous=?,visibility=? WHERE id=? AND user_id=?").bind(text,author,data.anonymous?1:0,visibility,id,u.userId).run();
+    return json({ok:true});
   }
   if(action==="progress"){
     if(scope.type==="shared"&&!await canReadSharedBook(scope.id,u.userId))return json({error:"forbidden"},403);
@@ -154,6 +163,6 @@ export async function DELETE(request: Request) {
   if(!await sameOrigin(request))return json({error:"invalid_origin"},403);
   const u=await requireUser(); if(!u)return json({error:"sign_in_required"},401);
   const data=await body(request),id=String(data?.id||""); if(!id)return json({error:"invalid_id"},400);
-  await db().prepare("DELETE FROM scripture_meditations WHERE id=? AND user_id=? AND is_seed=0").bind(id,u.userId).run();
-  return json({ok:true});
+  const result=await db().prepare("DELETE FROM scripture_meditations WHERE id=? AND user_id=?").bind(id,u.userId).run();
+  return result.meta.changes?json({ok:true}):json({error:"not_found"},404);
 }
