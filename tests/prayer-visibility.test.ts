@@ -8,8 +8,9 @@ const base = {
   memberGroupIds: ["group-a"],
 };
 
-test("friends-only prayer is visible to an active friend", () => {
+test("friends-only prayer is visible to an active friend, not a group-only peer", () => {
   assert.equal(canViewPrayer({ ...base, visibility: "friends", friendShared: true }), true);
+  assert.equal(canViewPrayer({ ...base, activeFriend: false, visibility: "friends", friendShared: true }), false);
 });
 
 test("group-only prayer is visible to a current member", () => {
