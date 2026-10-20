@@ -162,7 +162,7 @@ export async function POST(request: Request) {
   const action=String(data.action||""),d=db();
   if(action==="syncChapter"){
     const chapterId=String(data.chapterId||"");if(!chapterId)return json({error:"chapter_not_found"},404);
-    let allowed: ReturnType<typeof db>;
+    let allowed: unknown;
     if(scope.type==="shared")allowed=await d.prepare("SELECT c.id FROM scripture_chapters c JOIN scripture_chapter_access a ON a.chapter_id=c.id WHERE c.id=? AND c.scope_type='friends' AND c.scope_id=? AND a.user_id=?").bind(chapterId,scope.id,u.userId).first();
     else allowed=await d.prepare("SELECT id FROM scripture_chapters WHERE id=? AND scope_type=? AND scope_id=?").bind(chapterId,databaseScopeType(scope),scope.id).first();
     if(!allowed)return json({error:"chapter_not_found"},404);

@@ -18,6 +18,10 @@ const rewritten = source
 writeFileSync(join(temp, "app/api/scripture-notes/route.ts"), rewritten);
 const { syncScriptureChapter, syncMeditationCopies } = await import(pathToFileURL(join(temp, "app/api/scripture-notes/route.ts")).href);
 
+function count(sqlite: DatabaseSync, sql: string, ...args: Array<string | number | bigint | Uint8Array | null>): number {
+  return Number(sqlite.prepare(sql).get(...args)?.n ?? 0);
+}
+
 function setup(scopeType = "private", scopeId = "owner") {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
@@ -67,16 +71,16 @@ test("personal chapter syncs idempotently to friend and group books; private not
   assert.ok(groupChapterRow);
   const friendChapter = String(friendChapterRow.id);
   const groupChapter = String(groupChapterRow.id);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='공유 묵상'").get(friendChapter, groupChapter).n, 2);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='비공개 묵상'").get(friendChapter, groupChapter).n, 0);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND user_id='friend-a'").get(friendChapter, groupChapter).n, 0);
-  const countBefore = sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations").get().n;
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='공유 묵상'", friendChapter, groupChapter), 2);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='비공개 묵상'", friendChapter, groupChapter), 0);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND user_id='friend-a'", friendChapter, groupChapter), 0);
+  const countBefore = count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations");
   await syncScriptureChapter(d, "owner", "source", ["group-a"], ["friend-a"], false);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations").get().n, countBefore);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations"), countBefore);
   await syncScriptureChapter(d, "owner", "source", ["group-a"], ["friend-a", "friend-b"], false);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'").get().n, 1);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_chapter_access WHERE user_id IN ('friend-a','friend-b')").get().n, 2);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id=? AND body='공유 묵상'").get(friendChapter).n, 1);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 1);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapter_access WHERE user_id IN ('friend-a','friend-b')"), 2);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id=? AND body='공유 묵상'", friendChapter), 1);
 });
 
 test("group and friend-shared sources also sync to the other book scopes", async () => {
@@ -93,8 +97,8 @@ test("group and friend-shared sources also sync to the other book scopes", async
     assert.deepEqual(chapters.map((chapter) => chapter.scripture_text), Array(expectedCopies).fill("본문 텍스트 원문"));
     const ids = chapters.map((chapter) => String(chapter.id));
     const placeholders = ids.map(() => "?").join(",");
-    assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='공유 묵상'`).get(...ids).n, expectedCopies);
-    assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='비공개 묵상'`).get(...ids).n, 0);
+    assert.equal(count(sqlite, `SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='공유 묵상'`, ...ids), expectedCopies);
+    assert.equal(count(sqlite, `SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='비공개 묵상'`, ...ids), 0);
   }
 });
 
@@ -106,12 +110,12 @@ test("editing, making an owned note private, and deleting it affect only its syn
   await syncMeditationCopies(d, "owner", "source", "inherited", "inherit");
   sqlite.prepare("UPDATE scripture_meditations SET body='수정된 묵상' WHERE id='inherited'").run();
   await syncMeditationCopies(d, "owner", "source", "inherited", "inherit");
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited' AND body='수정된 묵상'").get().n, groupIds.length);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited' AND body='수정된 묵상'"), groupIds.length);
   sqlite.prepare("UPDATE scripture_meditations SET visibility='private' WHERE id='inherited'").run();
   await syncMeditationCopies(d, "owner", "source", "inherited", "private");
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited'").get().n, 1);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited'"), 1);
   sqlite.prepare("DELETE FROM scripture_meditations WHERE sync_key=? AND user_id=?").run("inherited", "owner");
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited'").get().n, 0);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE id='collaborator-note'").get().n, 1);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited'"), 0);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE id='collaborator-note'"), 1);
   assert.equal(copied.length, groupIds.length);
 });
