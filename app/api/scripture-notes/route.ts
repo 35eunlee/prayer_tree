@@ -170,6 +170,16 @@ export async function POST(request: Request) {
     if(result.error)return json(result,result.error==="chapter_owner_required"?403:400);
     return json({ok:true});
   }
+  if(action==="syncAllChapters"){
+    const valid=await validateScriptureTargets(d,u.userId,Array.isArray(data.groupIds)?data.groupIds.map(String):[],Array.isArray(data.friendIds)?data.friendIds.map(String):[]);
+    if(!valid)return json({error:"invalid_share_targets"},400);
+    if(!valid.groups.length&&!valid.friends.length&&!data.syncPrivate)return json({error:"choose_share_targets"},400);
+    const cursor=String(data.cursor||"").slice(0,150),limit=8;
+    const rows=await d.prepare("SELECT c.id FROM scripture_chapters c WHERE c.created_by=? AND c.id>? AND ((c.scope_type='private' AND c.scope_id=?) OR (c.scope_type='friends' AND c.scope_id=?) OR (c.scope_type='group' AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id=c.scope_id AND gm.user_id=?))) ORDER BY c.id LIMIT ?").bind(u.userId,cursor,u.userId,u.userId,u.userId,limit).all<any>();
+    const chapters=rows.results||[];
+    for(const row of chapters){const result=await syncScriptureChapter(d,u.userId,String(row.id),valid.groups,valid.friends,!!data.syncPrivate);if(result.error)return json(result,400)}
+    return json({ok:true,processed:chapters.length,cursor:chapters.length?String(chapters[chapters.length-1].id):cursor,done:chapters.length<limit});
+  }
   if(action==="createChapter"){
     if(scope.type==="shared")return json({error:"cannot_create_in_shared_book"},403);
     const bookId=String(data.bookId||""),book=BOOKS[bookId],chapter=Number(data.chapter);
