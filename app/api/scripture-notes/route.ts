@@ -102,7 +102,7 @@ async function syncScriptureChapter(d: ReturnType<typeof db>,userId:string,chapt
   }
   return {ok:true};
 }
-async function syncAllChapters(d: ReturnType<typeof db>,userId:string,groupIds:string[],friendIds:string[],syncPrivate:boolean,cursorValue:string){
+async function syncAllChapters(d: ReturnType<typeof db>,userId:string,groupIds:string[],friendIds:string[],syncPrivate:boolean,cursorValue:string):Promise<{error?:string;ok?:true;processed?:number;cursor?:string;done?:boolean}>{
   const valid=await validateScriptureTargets(d,userId,groupIds,friendIds);
   if(!valid)return {error:"invalid_share_targets"};
   if(!valid.groups.length&&!valid.friends.length&&!syncPrivate)return {error:"choose_share_targets"};
