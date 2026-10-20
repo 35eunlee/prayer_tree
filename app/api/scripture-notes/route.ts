@@ -187,9 +187,9 @@ export async function POST(request: Request) {
     const targetGroupIds=Array.isArray(data.targetGroupIds)?data.targetGroupIds.map(String):[],targetFriendIds=[...new Set([...(Array.isArray(data.targetFriendIds)?data.targetFriendIds.map(String):[]),...recipients])],syncPrivate=!!data.syncPrivate;
     const validTargets=await validateScriptureTargets(d,u.userId,targetGroupIds,targetFriendIds);if(!validTargets)return json({error:"invalid_share_targets"},400);
     const chapterId=crypto.randomUUID(),noteId=crypto.randomUUID(),now=isoNow();
-    const anonymous=!!data.anonymous,visibility=data.visibility==="private"?"private":"inherit",author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
+    const chapterAnonymous=!!data.chapterAnonymous,anonymous=!!(data.meditationAnonymous??data.anonymous),visibility=data.visibility==="private"?"private":"inherit",author=await prayerDisplayName(u.userId,String(u.displayName||"말씀나무 사용자"));
     const statements=[
-      d.prepare("INSERT INTO scripture_chapters (id,scope_type,scope_id,book_id,book_name,chapter,scripture_text,created_by,creator_name,is_anonymous,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(chapterId,databaseScopeType(scope),scope.id,bookId,book.name,chapter,scripture,u.userId,author,anonymous?1:0,now,now),
+      d.prepare("INSERT INTO scripture_chapters (id,scope_type,scope_id,book_id,book_name,chapter,scripture_text,created_by,creator_name,is_anonymous,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(chapterId,databaseScopeType(scope),scope.id,bookId,book.name,chapter,scripture,u.userId,author,chapterAnonymous?1:0,now,now),
       d.prepare("INSERT INTO scripture_meditations (id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,visibility,created_at) VALUES (?,?,?,?,?,1,?,?,?)").bind(noteId,chapterId,u.userId,author,meditation,anonymous?1:0,visibility,now),
       ...recipients.map(userId=>d.prepare("INSERT INTO scripture_chapter_access (chapter_id,user_id,created_at) VALUES (?,?,?)").bind(chapterId,userId,now))
     ];
