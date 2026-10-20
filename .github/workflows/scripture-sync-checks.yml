@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - app/api/scripture-notes/route.ts
+      - db/schema.ts
+      - drizzle/0016_scripture_sync_source.sql
+      - drizzle/meta/_journal.json
       - public/prayer-tree.html
       - tests/scripture-sync.test.ts
       - package.json
