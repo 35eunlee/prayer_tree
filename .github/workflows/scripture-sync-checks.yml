@@ -1,9 +1,6 @@
 name: Scripture sync checks
 
 on:
-  push:
-    branches:
-      - fix/scripture-sync-single-implementation
   pull_request:
     branches:
       - main
