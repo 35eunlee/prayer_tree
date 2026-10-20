@@ -114,6 +114,10 @@ async function syncMeditationCopies(d: ReturnType<typeof db>,userId:string,chapt
 export async function GET(request: Request) {
   const u=await requireUser(); if(!u)return json({error:"sign_in_required"},401);
   const url=new URL(request.url),type=url.searchParams.get("scopeType")||"private";
+  if(type==="recentOwned"){
+    const recent=await db().prepare("SELECT c.book_id AS bookId,c.chapter,c.scope_type AS scopeType,c.scope_id AS scopeId,c.created_at AS createdAt FROM scripture_chapters c WHERE c.created_by=? AND ((c.scope_type='private' AND c.scope_id=?) OR (c.scope_type='friends' AND c.scope_id=?) OR (c.scope_type='group' AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id=c.scope_id AND gm.user_id=?))) ORDER BY c.created_at DESC,CASE c.scope_type WHEN 'private' THEN 0 WHEN 'friends' THEN 1 ELSE 2 END,c.id DESC LIMIT 1").bind(u.userId,u.userId,u.userId,u.userId).first<any>();
+    return json({recent:recent||null});
+  }
   if(type==="shared"&&!url.searchParams.get("scopeId")) return json({sharedBooks:await getSharedBooks(u.userId)});
   const scope=await getScope(type,url.searchParams.get("scopeId"),u.userId);
   if(!scope)return json({error:"group_not_found_or_forbidden"},403);
