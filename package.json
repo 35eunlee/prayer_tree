@@ -13,7 +13,9 @@
     "deploy:cloudflare": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 migrations apply DB --remote --config dist/server/wrangler.json && node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js deploy --config dist/server/wrangler.json",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "test:prayer-visibility": "node --experimental-strip-types --test tests/prayer-visibility.test.ts"
+    "test:prayer-visibility": "node --experimental-strip-types --test tests/prayer-visibility.test.ts",
+    "test:scripture-sync": "node --experimental-strip-types --test tests/scripture-sync.test.ts",
+    "test:scripture-delete": "node --experimental-strip-types --test tests/scripture-delete.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -70,3 +72,4 @@
     }
   }
 }
+

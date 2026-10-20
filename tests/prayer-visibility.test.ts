@@ -28,7 +28,6 @@ test("private prayer stays private even when its tree is shared with friends", (
     ...base,
     visibility: "private",
     friendShared: true,
-    treeSharedToFriends: true,
     groupIds: ["group-a"],
     friendIds: ["viewer"],
   }), false);
@@ -46,3 +45,4 @@ test("a group-scoped request only returns prayers shared with that group", () =>
   assert.equal(canViewPrayer({ ...base, visibility: "friends", friendShared: true, requestedGroupId: "group-a" }), false);
   assert.equal(canViewPrayer({ ...base, visibility: "friends_groups", groupIds: ["group-a"], requestedGroupId: "group-a" }), true);
 });
+

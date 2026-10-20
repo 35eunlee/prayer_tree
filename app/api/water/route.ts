@@ -26,6 +26,7 @@ export async function POST(request:Request){
   const u=await requireUser();
   if(!u)return json({error:"sign_in_required"},401);
   const b=await body(request);
+  if(!b)return json({error:"invalid_body"},400);
   let ownerId=String(b?.ownerId||""),prayerId=String(b?.prayerId||"");
   const sharedId=String(b?.sharedId||"");
   if(!ownerId||!prayerId)return json({error:"invalid_prayer"},400);
