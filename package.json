@@ -14,7 +14,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test:prayer-visibility": "node --experimental-strip-types --test tests/prayer-visibility.test.ts",
-    "test:scripture-sync": "node --experimental-strip-types --test tests/scripture-sync.test.ts"
+    "test:scripture-sync": "node --experimental-strip-types --test tests/scripture-sync.test.ts",
+    "test:scripture-delete": "node --experimental-strip-types --test tests/scripture-delete.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -71,4 +72,3 @@
     }
   }
 }
-
