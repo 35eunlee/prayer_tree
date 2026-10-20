@@ -44,24 +44,24 @@ async function getSharedBooks(userId: string) {
 }
 
 
-async function validateScriptureTargets(d:any,userId:string,groupIds:string[],friendIds:string[]){
+async function validateScriptureTargets(d: ReturnType<typeof db>,userId:string,groupIds:string[],friendIds:string[]){
   const groups=[...new Set(groupIds.map(x=>String(x).slice(0,100)).filter(Boolean))].slice(0,30),friends=[...new Set(friendIds.map(x=>String(x).slice(0,150)).filter(Boolean))].slice(0,30);
   if(groups.length){const rows=await d.prepare(`SELECT group_id FROM group_members WHERE user_id=? AND group_id IN (${groups.map(()=>"?").join(",")})`).bind(userId,...groups).all<any>();if((rows.results||[]).length!==groups.length)return null}
   if(friends.length){const rows=await d.prepare(`SELECT friend_id FROM friends WHERE user_id=? AND friend_id IN (${friends.map(()=>"?").join(",")})`).bind(userId,...friends).all<any>();if((rows.results||[]).length!==friends.length)return null}
   return {groups,friends};
 }
-async function scriptureSyncGroup(d:any,userId:string,bookId:string,chapter:number){
+async function scriptureSyncGroup(d: ReturnType<typeof db>,userId:string,bookId:string,chapter:number){
   let row=await d.prepare("SELECT id FROM scripture_chapter_sync_groups WHERE owner_id=? AND book_id=? AND chapter=?").bind(userId,bookId,chapter).first<any>();
   if(!row){const id=crypto.randomUUID();await d.prepare("INSERT OR IGNORE INTO scripture_chapter_sync_groups(id,owner_id,book_id,chapter,created_at) VALUES(?,?,?,?,?)").bind(id,userId,bookId,chapter,isoNow()).run();row=await d.prepare("SELECT id FROM scripture_chapter_sync_groups WHERE owner_id=? AND book_id=? AND chapter=?").bind(userId,bookId,chapter).first<any>()}
   return row?.id as string;
 }
-async function linkScriptureChapter(d:any,userId:string,sourceId:string,targetId:string){
+async function linkScriptureChapter(d: ReturnType<typeof db>,userId:string,sourceId:string,targetId:string){
   const source=await d.prepare("SELECT book_id AS bookId,chapter FROM scripture_chapters WHERE id=?").bind(sourceId).first<any>();if(!source)return;
   const groupId=await scriptureSyncGroup(d,userId,source.bookId,Number(source.chapter));
   await d.prepare("INSERT OR IGNORE INTO scripture_chapter_sync_members(sync_group_id,chapter_id) VALUES(?,?)").bind(groupId,sourceId).run();
   await d.prepare("INSERT OR IGNORE INTO scripture_chapter_sync_members(sync_group_id,chapter_id) VALUES(?,?)").bind(groupId,targetId).run();
 }
-async function syncOwnedNotesToChapter(d:any,userId:string,sourceChapterId:string,targetChapterId:string){
+async function syncOwnedNotesToChapter(d: ReturnType<typeof db>,userId:string,sourceChapterId:string,targetChapterId:string){
   const notes=await d.prepare("SELECT * FROM scripture_meditations WHERE chapter_id=? AND user_id=? AND visibility='inherit'").bind(sourceChapterId,userId).all<any>();
   for(const n of notes.results||[]){
     const key=n.sync_key||n.id;
@@ -73,7 +73,7 @@ async function syncOwnedNotesToChapter(d:any,userId:string,sourceChapterId:strin
     await d.prepare("INSERT INTO scripture_meditations(id,chapter_id,user_id,author_name,body,is_seed,is_anonymous,visibility,sync_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(),targetChapterId,userId,n.author_name,n.body,n.is_seed,n.is_anonymous,n.visibility,key,n.created_at).run();
   }
 }
-async function syncScriptureChapter(d:any,userId:string,chapterId:string,groupIds:string[],friendIds:string[],syncPrivate:boolean){
+async function syncScriptureChapter(d: ReturnType<typeof db>,userId:string,chapterId:string,groupIds:string[],friendIds:string[],syncPrivate:boolean){
   const source=await d.prepare("SELECT * FROM scripture_chapters WHERE id=?").bind(chapterId).first<any>();if(!source)return {error:"chapter_not_found"};
   if(source.created_by!==userId)return {error:"chapter_owner_required"};
   const valid=await validateScriptureTargets(d,userId,groupIds,friendIds);if(!valid)return {error:"invalid_share_targets"};
@@ -101,7 +101,7 @@ async function syncScriptureChapter(d:any,userId:string,chapterId:string,groupId
   }
   return {ok:true};
 }
-async function syncMeditationCopies(d:any,userId:string,chapterId:string,noteId:string,visibility:string){
+async function syncMeditationCopies(d: ReturnType<typeof db>,userId:string,chapterId:string,noteId:string,visibility:string){
   const note=await d.prepare("SELECT * FROM scripture_meditations WHERE id=? AND user_id=?").bind(noteId,userId).first<any>();if(!note)return;
   const key=note.sync_key||note.id;
   if(!note.sync_key)await d.prepare("UPDATE scripture_meditations SET sync_key=? WHERE id=?").bind(key,note.id).run();
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
   const action=String(data.action||""),d=db();
   if(action==="syncChapter"){
     const chapterId=String(data.chapterId||"");if(!chapterId)return json({error:"chapter_not_found"},404);
-    let allowed:any;
+    let allowed: ReturnType<typeof db>;
     if(scope.type==="shared")allowed=await d.prepare("SELECT c.id FROM scripture_chapters c JOIN scripture_chapter_access a ON a.chapter_id=c.id WHERE c.id=? AND c.scope_type='friends' AND c.scope_id=? AND a.user_id=?").bind(chapterId,scope.id,u.userId).first();
     else allowed=await d.prepare("SELECT id FROM scripture_chapters WHERE id=? AND scope_type=? AND scope_id=?").bind(chapterId,databaseScopeType(scope),scope.id).first();
     if(!allowed)return json({error:"chapter_not_found"},404);

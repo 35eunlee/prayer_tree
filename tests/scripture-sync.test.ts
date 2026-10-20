@@ -30,17 +30,17 @@ function setup(scopeType = "private", scopeId = "owner") {
     CREATE TABLE group_members (group_id TEXT, user_id TEXT);
   `);
   const d = {
-    prepare(sql) {
-      let args = [];
+    prepare(sql: string) {
+      let args: Array<string | number | bigint | Uint8Array | null> = [];
       return {
-        bind(...values) { args = values; return this; },
+        bind(...values: Array<string | number | bigint | Uint8Array | null>) { args = values; return this; },
         first() { return sqlite.prepare(sql).get(...args) ?? null; },
         all() { return { results: sqlite.prepare(sql).all(...args) }; },
         run() { const result = sqlite.prepare(sql).run(...args); return { meta: { changes: Number(result.changes) } }; },
       };
     },
   };
-  globalThis.__prayerDb = d;
+  Object.assign(globalThis, { __prayerDb: d });
   const insertChapter = sqlite.prepare("INSERT INTO scripture_chapters VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
   insertChapter.run("source", scopeType, scopeId, "gen", "창세기", 1, "본문 텍스트 원문", "owner", "소유자", 0, "t0", "t0");
   sqlite.prepare("INSERT INTO friends VALUES(?,?)").run("owner", "friend-a");
@@ -61,8 +61,12 @@ test("personal chapter syncs idempotently to friend and group books; private not
   const chapters = sqlite.prepare("SELECT id,scope_type,scope_id,scripture_text FROM scripture_chapters WHERE id<>'source' ORDER BY scope_type").all();
   assert.equal(chapters.length, 2);
   assert.deepEqual(chapters.map((x) => x.scripture_text), ["본문 텍스트 원문", "본문 텍스트 원문"]);
-  const friendChapter = chapters.find((x) => x.scope_type === "friends").id;
-  const groupChapter = chapters.find((x) => x.scope_type === "group").id;
+  const friendChapterRow = chapters.find((x) => x.scope_type === "friends");
+  const groupChapterRow = chapters.find((x) => x.scope_type === "group");
+  assert.ok(friendChapterRow);
+  assert.ok(groupChapterRow);
+  const friendChapter = String(friendChapterRow.id);
+  const groupChapter = String(groupChapterRow.id);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='공유 묵상'").get(friendChapter, groupChapter).n, 2);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND body='비공개 묵상'").get(friendChapter, groupChapter).n, 0);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (?,?) AND user_id='friend-a'").get(friendChapter, groupChapter).n, 0);
@@ -76,17 +80,18 @@ test("personal chapter syncs idempotently to friend and group books; private not
 });
 
 test("group and friend-shared sources also sync to the other book scopes", async () => {
-  for (const [scopeType, scopeId, groups, friends] of [
+  const cases: Array<[string, string, string[], string[]]> = [
     ["group", "group-a", ["group-b"], ["friend-a"]],
     ["friends", "owner", ["group-a"], ["friend-b"]],
-  ]) {
+  ];
+  for (const [scopeType, scopeId, groups, friends] of cases) {
     const { sqlite, d } = setup(scopeType, scopeId);
     await syncScriptureChapter(d, "owner", "source", groups, friends, true);
     const chapters = sqlite.prepare("SELECT id,scope_type,scope_id,scripture_text FROM scripture_chapters WHERE id<>'source'").all();
     const expectedCopies = scopeType === "friends" ? 2 : 3;
     assert.equal(chapters.length, expectedCopies);
     assert.deepEqual(chapters.map((chapter) => chapter.scripture_text), Array(expectedCopies).fill("본문 텍스트 원문"));
-    const ids = chapters.map((chapter) => chapter.id);
+    const ids = chapters.map((chapter) => String(chapter.id));
     const placeholders = ids.map(() => "?").join(",");
     assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='공유 묵상'`).get(...ids).n, expectedCopies);
     assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='비공개 묵상'`).get(...ids).n, 0);
@@ -97,7 +102,7 @@ test("editing, making an owned note private, and deleting it affect only its syn
   const { sqlite, d } = setup();
   await syncScriptureChapter(d, "owner", "source", ["group-a"], ["friend-a"], false);
   const copied = sqlite.prepare("SELECT id,chapter_id AS chapterId FROM scripture_meditations WHERE sync_key='inherited'").all();
-  const groupIds = sqlite.prepare("SELECT chapter_id AS chapterId FROM scripture_chapter_sync_members").all().map((r) => r.chapterId);
+  const groupIds = sqlite.prepare("SELECT chapter_id AS chapterId FROM scripture_chapter_sync_members").all().map((r) => String(r.chapterId));
   await syncMeditationCopies(d, "owner", "source", "inherited", "inherit");
   sqlite.prepare("UPDATE scripture_meditations SET body='수정된 묵상' WHERE id='inherited'").run();
   await syncMeditationCopies(d, "owner", "source", "inherited", "inherit");
