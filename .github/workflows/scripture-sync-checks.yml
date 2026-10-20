@@ -1,0 +1,38 @@
+name: Scripture sync checks
+
+on:
+  push:
+    branches:
+      - fix/scripture-sync-single-implementation
+  pull_request:
+    branches:
+      - main
+    paths:
+      - app/api/scripture-notes/route.ts
+      - tests/scripture-sync.test.ts
+      - package.json
+      - tsconfig.json
+      - .github/workflows/scripture-sync-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13"
+          cache: npm
+      - name: Install dependencies
+        run: npm run install:ci
+      - name: Type check
+        run: npm exec tsc -- --noEmit
+      - name: Scripture synchronization tests
+        run: npm run test:scripture-sync
+      - name: Prayer visibility tests
+        run: npm run test:prayer-visibility
+      - name: Build
+        run: npm run build
