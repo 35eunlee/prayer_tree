@@ -357,10 +357,26 @@ async function loadScriptureOptions(){
   select.innerHTML='<optgroup label="내 성경책"><option value="private">나의 개인 성경책</option><option value="friends">선택한 친구에게 공유하는 성경책</option></optgroup>'+
    (groups.length?'<optgroup label="그룹 성경책">'+groups.map(g=>'<option value="group:'+escapeScripture(g.id)+'">'+escapeScripture(g.name)+'</option>').join("")+'</optgroup>':'')+
    (scriptureSharedBooks.length?'<optgroup label="친구가 나에게 공유한 성경책">'+scriptureSharedBooks.map(s=>'<option value="shared:'+escapeScripture(s.ownerId)+'">'+escapeScripture(s.ownerName)+'의 성경책 · '+s.chapterCount+'장</option>').join("")+'</optgroup>':'');
-  if(old&&[...select.options].some(o=>o.value===old))select.value=old;else select.value="private";renderScriptureCollectionOptions();scriptureCollectionMode=!!db.scriptureCollectionMode;
- }catch(e){select.innerHTML='<option value="private">나의 개인 성경책</option><option value="friends">선택한 친구에게 공유하는 성경책</option>';scriptureFriends=[];scriptureSharedBooks=[];scriptureGroups=[];renderScriptureCollectionOptions();scriptureCollectionMode=!!db.scriptureCollectionMode}
+  if(old&&[...select.options].some(o=>o.value===old))select.value=old;else select.value="private";renderScriptureCollectionOptions();renderScriptureShareTargets();scriptureCollectionMode=!!db.scriptureCollectionMode;
+ }catch(e){select.innerHTML='<option value="private">나의 개인 성경책</option><option value="friends">선택한 친구에게 공유하는 성경책</option>';scriptureFriends=[];scriptureSharedBooks=[];scriptureGroups=[];renderScriptureCollectionOptions();renderScriptureShareTargets();scriptureCollectionMode=!!db.scriptureCollectionMode}
  applyScriptureScope()
 }
+function renderScriptureShareTargets(){
+ const box=$("scriptureShareTargetOptions");if(!box)return;
+ const groups=scriptureGroups||[],friends=scriptureFriends||[];
+ const savedGroups=new Set(db.scriptureShareTargetGroups||[]),savedFriends=new Set(db.scriptureShareTargetFriends||[]);
+ box.innerHTML='<label class="scripture-target-pick"><input type="checkbox" name="scriptureSyncPrivate" '+(db.scriptureShareTargetPrivate?"checked":"")+'/>내 개인책에도 복사</label>'
+ +'<details class="scripture-share-target-group"><summary>그룹 선택 · '+groups.length+'</summary><div class="scripture-target-picks">'
+ +(groups.length?groups.map(g=>'<label><input type="checkbox" name="scriptureTargetGroup" value="'+escapeScripture(g.id)+'" '+(savedGroups.has(g.id)?"checked":"")+'/>'+escapeScripture(g.name)+'</label>').join(""):'<span class="scripture-help">가입한 그룹이 없어요.</span>')
+ +'</div></details><details class="scripture-share-target-group"><summary>친구 선택 · '+friends.length+'</summary><div class="scripture-target-picks">'
+ +(friends.length?friends.map(f=>'<label><input type="checkbox" name="scriptureTargetFriend" value="'+escapeScripture(f.id)+'" '+(savedFriends.has(f.id)?"checked":"")+'/>'+escapeScripture(f.name)+'</label>').join(""):'<span class="scripture-help">연결된 친구가 없어요.</span>')
+ +'</div></details>';
+ box.querySelectorAll("input").forEach(input=>input.addEventListener("change",()=>{
+  const targets=selectedScriptureTargets();
+  db.scriptureShareTargetGroups=targets.groupIds;db.scriptureShareTargetFriends=targets.friendIds;db.scriptureShareTargetPrivate=targets.syncPrivate;save();
+ }))
+}
+
 function applyScriptureScope(){const v=$("scriptureScope").value;if(v.startsWith("group:")){scriptureScopeType="group";scriptureScopeId=v.slice(6)}else if(v==="friends"){scriptureScopeType="friends";scriptureScopeId=sessionUserId||""}else if(v.startsWith("shared:")){scriptureScopeType="shared";scriptureScopeId=v.slice(7)}else{scriptureScopeType="private";scriptureScopeId=""}
  $("nextScriptureChapter").textContent=scriptureScopeType==="shared"?"다음 공유 장 보기":"다음 빈 장 보기";const help=$("scriptureScopeHelp");if(help)help.textContent=scriptureScopeType==="private"?"이 개인 성경책은 나만 볼 수 있어요.":scriptureScopeType==="group"?"선택한 그룹 구성원과 본문·묵상을 함께 봅니다.":scriptureScopeType==="friends"?"빈 장을 만들 때 공유할 친구를 직접 선택해요.":"친구가 나와 공유한 본문과 묵상입니다.";if(help&&scriptureCollectionMode)help.textContent="선택한 성경책 조합의 본문과 묵상을 모아 봅니다. 새 기록은 위에서 선택한 작성·동기화 대상에 저장돼요.";
  scriptureBook=null;scriptureChapter=null;scriptureCurrent=null;scriptureMeditations=[];scriptureChapters=[];scriptureProgress.clear();renderScriptureBooks();renderScriptureProgress();renderScriptureChapterGrid();renderScriptureDetail();loadScriptureScope()}
