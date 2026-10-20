@@ -18,7 +18,7 @@ const rewritten = source
 writeFileSync(join(temp, "app/api/scripture-notes/route.ts"), rewritten);
 const { syncScriptureChapter, syncMeditationCopies } = await import(pathToFileURL(join(temp, "app/api/scripture-notes/route.ts")).href);
 
-function setup() {
+function setup(scopeType = "private", scopeId = "owner") {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     CREATE TABLE scripture_chapters (id TEXT PRIMARY KEY, scope_type TEXT, scope_id TEXT, book_id TEXT, book_name TEXT, chapter INTEGER, scripture_text TEXT, created_by TEXT, creator_name TEXT, is_anonymous INTEGER, created_at TEXT, updated_at TEXT, UNIQUE(scope_type,scope_id,book_id,chapter));
@@ -42,10 +42,12 @@ function setup() {
   };
   globalThis.__prayerDb = d;
   const insertChapter = sqlite.prepare("INSERT INTO scripture_chapters VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
-  insertChapter.run("source", "private", "owner", "gen", "창세기", 1, "본문 텍스트 원문", "owner", "소유자", 0, "t0", "t0");
+  insertChapter.run("source", scopeType, scopeId, "gen", "창세기", 1, "본문 텍스트 원문", "owner", "소유자", 0, "t0", "t0");
   sqlite.prepare("INSERT INTO friends VALUES(?,?)").run("owner", "friend-a");
   sqlite.prepare("INSERT INTO friends VALUES(?,?)").run("owner", "friend-b");
   sqlite.prepare("INSERT INTO group_members VALUES(?,?)").run("group-a", "owner");
+  sqlite.prepare("INSERT INTO group_members VALUES(?,?)").run("group-b", "owner");
+  if (scopeType === "friends") sqlite.prepare("INSERT INTO scripture_chapter_access VALUES(?,?,?)").run("source", "friend-a", "t0");
   const note = sqlite.prepare("INSERT INTO scripture_meditations VALUES(?,?,?,?,?,?,?,?,?,?)");
   note.run("inherited", "source", "owner", "소유자", "공유 묵상", 0, 0, "inherit", null, "t1");
   note.run("private-note", "source", "owner", "소유자", "비공개 묵상", 0, 0, "private", null, "t2");
@@ -71,6 +73,24 @@ test("personal chapter syncs idempotently to friend and group books; private not
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'").get().n, 1);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_chapter_access WHERE user_id IN ('friend-a','friend-b')").get().n, 2);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id=? AND body='공유 묵상'").get(friendChapter).n, 1);
+});
+
+test("group and friend-shared sources also sync to the other book scopes", async () => {
+  for (const [scopeType, scopeId, groups, friends] of [
+    ["group", "group-a", ["group-b"], ["friend-a"]],
+    ["friends", "owner", ["group-a"], ["friend-b"]],
+  ]) {
+    const { sqlite, d } = setup(scopeType, scopeId);
+    await syncScriptureChapter(d, "owner", "source", groups, friends, true);
+    const chapters = sqlite.prepare("SELECT id,scope_type,scope_id,scripture_text FROM scripture_chapters WHERE id<>'source'").all();
+    const expectedCopies = scopeType === "friends" ? 2 : 3;
+    assert.equal(chapters.length, expectedCopies);
+    assert.deepEqual(chapters.map((chapter) => chapter.scripture_text), Array(expectedCopies).fill("본문 텍스트 원문"));
+    const ids = chapters.map((chapter) => chapter.id);
+    const placeholders = ids.map(() => "?").join(",");
+    assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='공유 묵상'`).get(...ids).n, expectedCopies);
+    assert.equal(sqlite.prepare(`SELECT COUNT(*) AS n FROM scripture_meditations WHERE chapter_id IN (${placeholders}) AND body='비공개 묵상'`).get(...ids).n, 0);
+  }
 });
 
 test("editing, making an owned note private, and deleting it affect only its synchronized copies", async () => {
