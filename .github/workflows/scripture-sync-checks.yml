@@ -11,6 +11,7 @@ on:
       - drizzle/meta/_journal.json
       - public/prayer-tree.html
       - tests/scripture-sync.test.ts
+      - tests/scripture-delete.test.mjs
       - package.json
       - tsconfig.json
       - .github/workflows/scripture-sync-checks.yml
@@ -33,6 +34,8 @@ jobs:
         run: npm exec tsc -- --noEmit
       - name: Scripture synchronization tests
         run: npm run test:scripture-sync
+      - name: Scripture deletion tests
+        run: npm run test:scripture-delete
       - name: Prayer visibility tests
         run: npm run test:prayer-visibility
       - name: Build
