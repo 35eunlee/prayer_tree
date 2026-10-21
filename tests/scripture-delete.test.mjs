@@ -124,3 +124,47 @@ test("DELETE cannot remove a meditation owned by another user", async () => {
   assert.equal(response.status, 404);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_meditations").get().n, 1);
 });
+
+for (const scope of ["private", "friends", "group"]) {
+  for (const syncKey of [null, "scope-sync"]) {
+    test(`DELETE in ${scope} books requires the meditation author (${syncKey ? "synced" : "unsynced"})`, async () => {
+      const sqlite = new DatabaseSync(":memory:");
+      try {
+        sqlite.exec(`
+          CREATE TABLE scripture_chapters (id TEXT PRIMARY KEY, scope_type TEXT, scope_id TEXT, created_by TEXT);
+          CREATE TABLE scripture_meditations (id TEXT PRIMARY KEY, chapter_id TEXT, user_id TEXT NOT NULL, sync_key TEXT);
+          CREATE TABLE friends (user_id TEXT, friend_id TEXT);
+          CREATE TABLE group_members (group_id TEXT, user_id TEXT);
+          CREATE TABLE scripture_chapter_access (chapter_id TEXT, user_id TEXT);
+        `);
+        sqlite.prepare("INSERT INTO scripture_chapters VALUES(?,?,?,?)").run("chapter", scope, scope === "group" ? "group-a" : "book-owner", "book-owner");
+        sqlite.prepare("INSERT INTO friends VALUES(?,?)").run("book-owner", "author");
+        sqlite.prepare("INSERT INTO friends VALUES(?,?)").run("book-owner", "peer");
+        for (const user of ["book-owner", "author", "peer"]) {
+          sqlite.prepare("INSERT INTO group_members VALUES(?,?)").run("group-a", user);
+          sqlite.prepare("INSERT INTO scripture_chapter_access VALUES(?,?)").run("chapter", user);
+        }
+        // A private book's author is its owner; shared books may contain a peer's meditation.
+        const author = scope === "private" ? "book-owner" : "author";
+        const insert = sqlite.prepare("INSERT INTO scripture_meditations VALUES(?,?,?,?)");
+        insert.run("target", "chapter", author, syncKey);
+        insert.run("other-note", "chapter", "peer", syncKey);
+        insert.run("unrelated", "chapter", author, "unrelated-sync");
+        const before = sqlite.prepare("SELECT * FROM scripture_meditations ORDER BY id").all();
+        for (const actor of (scope === "private" ? ["peer", "outsider"] : ["book-owner", "peer", "outsider"])) {
+          Object.assign(globalThis, { __deleteDb: databaseAdapter(sqlite), __deleteUser: { userId: actor } });
+          const denied = await deleteRequest("target");
+          assert.equal(denied.status, 404, `${actor} cannot delete someone else's meditation`);
+          assert.deepEqual(sqlite.prepare("SELECT * FROM scripture_meditations ORDER BY id").all(), before);
+        }
+        Object.assign(globalThis, { __deleteDb: databaseAdapter(sqlite), __deleteUser: { userId: author } });
+        assert.equal((await deleteRequest("target")).status, 200);
+        assert.deepEqual(sqlite.prepare("SELECT id FROM scripture_meditations ORDER BY id").all().map(row => row.id), ["other-note", "unrelated"]);
+        assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM scripture_chapters").get().n, 1);
+        assert.equal((await deleteRequest("target")).status, 404);
+      } finally {
+        sqlite.close();
+      }
+    });
+  }
+}
