@@ -37,7 +37,7 @@ export const scriptureChapterAccess = sqliteTable("scripture_chapter_access", {
   chapterId: text("chapter_id").notNull().references(() => scriptureChapters.id,{onDelete:"cascade"}), userId: text("user_id").notNull(), createdAt: text("created_at").notNull()
 }, (t) => [primaryKey({columns:[t.chapterId,t.userId],name:"scripture_chapter_access_pk"}), index("scripture_chapter_access_user_idx").on(t.userId,t.chapterId)]);
 export const scriptureChapterSyncGroups = sqliteTable("scripture_chapter_sync_groups", {
-  id: text("id").primaryKey(), ownerId: text("owner_id").notNull(), bookId: text("book_id").notNull(), chapter: integer("chapter").notNull(), createdAt: text("created_at").notNull()
+  id: text("id").primaryKey(), ownerId: text("owner_id").notNull(), bookId: text("book_id").notNull(), chapter: integer("chapter").notNull(), createdAt: text("created_at").notNull(), sourceChapterId: text("source_chapter_id")
 }, (t) => [uniqueIndex("scripture_sync_owner_book_chapter_unique").on(t.ownerId,t.bookId,t.chapter)]);
 export const scriptureChapterSyncMembers = sqliteTable("scripture_chapter_sync_members", {
   syncGroupId: text("sync_group_id").notNull().references(() => scriptureChapterSyncGroups.id,{onDelete:"cascade"}), chapterId: text("chapter_id").notNull().references(() => scriptureChapters.id,{onDelete:"cascade"})

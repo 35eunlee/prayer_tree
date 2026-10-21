@@ -11,23 +11,23 @@ const source = readFileSync(routePath, "utf8");
 assert.equal((source.match(/async function syncScriptureChapter\(/g) ?? []).length, 1, "the route must define one syncScriptureChapter implementation");
 const temp = mkdtempSync(join(tmpdir(), "scripture-sync-"));
 mkdirSync(join(temp, "app/api/scripture-notes"), { recursive: true });
-writeFileSync(join(temp, "server.ts"), `export const db=()=>globalThis.__prayerDb; export const isoNow=()=>"2026-10-20T00:00:00.000Z"; export const json=()=>{}; export const requireUser=()=>{}; export const body=()=>{}; export const sameOrigin=()=>{};`);
+writeFileSync(join(temp, "server.ts"), `export const db=()=>globalThis.__prayerDb; export const isoNow=()=>"2026-10-20T00:00:00.000Z"; export const json=(data:any,status=200)=>({data,status}); export const requireUser=async()=>({userId:"owner",displayName:"Owner"}); export const body=async(request:Request)=>request.json(); export const sameOrigin=async()=>true;`);
 const rewritten = source
   .replace('import { db, json, requireUser, body, sameOrigin, isoNow } from "@/lib/server";', 'import { db, json, requireUser, body, sameOrigin, isoNow } from "../../../server.ts";')
-  + "\nexport { syncScriptureChapter, syncMeditationCopies };\n";
+  + "\nexport { syncScriptureChapter, syncMeditationCopies, syncAllChapters };\n";
 writeFileSync(join(temp, "app/api/scripture-notes/route.ts"), rewritten);
-const { syncScriptureChapter, syncMeditationCopies } = await import(pathToFileURL(join(temp, "app/api/scripture-notes/route.ts")).href);
+const { syncScriptureChapter, syncMeditationCopies, syncAllChapters, POST } = await import(pathToFileURL(join(temp, "app/api/scripture-notes/route.ts")).href);
 
 function count(sqlite: DatabaseSync, sql: string, ...args: Array<string | number | bigint | Uint8Array | null>): number {
   return Number(sqlite.prepare(sql).get(...args)?.n ?? 0);
 }
 
-function setup(scopeType = "private", scopeId = "owner") {
+function setup(scopeType = "private", scopeId = "owner", chapterCount = 1) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     CREATE TABLE scripture_chapters (id TEXT PRIMARY KEY, scope_type TEXT, scope_id TEXT, book_id TEXT, book_name TEXT, chapter INTEGER, scripture_text TEXT, created_by TEXT, creator_name TEXT, is_anonymous INTEGER, created_at TEXT, updated_at TEXT, UNIQUE(scope_type,scope_id,book_id,chapter));
     CREATE TABLE scripture_meditations (id TEXT PRIMARY KEY, chapter_id TEXT, user_id TEXT, author_name TEXT, body TEXT, is_seed INTEGER, is_anonymous INTEGER, visibility TEXT, sync_key TEXT, created_at TEXT);
-    CREATE TABLE scripture_chapter_sync_groups (id TEXT PRIMARY KEY, owner_id TEXT, book_id TEXT, chapter INTEGER, created_at TEXT, UNIQUE(owner_id,book_id,chapter));
+    CREATE TABLE scripture_chapter_sync_groups (id TEXT PRIMARY KEY, owner_id TEXT, book_id TEXT, chapter INTEGER, created_at TEXT, source_chapter_id TEXT, UNIQUE(owner_id,book_id,chapter));
     CREATE TABLE scripture_chapter_sync_members (sync_group_id TEXT, chapter_id TEXT, PRIMARY KEY(sync_group_id,chapter_id));
     CREATE TABLE scripture_chapter_access (chapter_id TEXT, user_id TEXT, created_at TEXT, UNIQUE(chapter_id,user_id));
     CREATE TABLE friends (user_id TEXT, friend_id TEXT);
@@ -38,7 +38,7 @@ function setup(scopeType = "private", scopeId = "owner") {
       let args: Array<string | number | bigint | Uint8Array | null> = [];
       return {
         bind(...values: Array<string | number | bigint | Uint8Array | null>) { args = values; return this; },
-        first() { return sqlite.prepare(sql).get(...args) ?? null; },
+        first() { if ((globalThis as any).__failSyncChapter === args[0] && sql === "SELECT * FROM scripture_chapters WHERE id=?") { (globalThis as any).__failSyncChapter = undefined; throw new Error("injected chapter failure"); } return sqlite.prepare(sql).get(...args) ?? null; },
         all() { return { results: sqlite.prepare(sql).all(...args) }; },
         run() { const result = sqlite.prepare(sql).run(...args); return { meta: { changes: Number(result.changes) } }; },
       };
@@ -56,6 +56,14 @@ function setup(scopeType = "private", scopeId = "owner") {
   note.run("inherited", "source", "owner", "소유자", "공유 묵상", 0, 0, "inherit", null, "t1");
   note.run("private-note", "source", "owner", "소유자", "비공개 묵상", 0, 0, "private", null, "t2");
   note.run("collaborator-note", "source", "friend-a", "친구", "친구만의 묵상", 0, 0, "inherit", null, "t3");
+  if (chapterCount > 1) {
+    for (let chapter = 2; chapter <= chapterCount; chapter++) {
+      const id = "source-" + String(chapter - 1).padStart(2, "0");
+      insertChapter.run(id, "private", "owner", "gen", "창세기", chapter, "본문 텍스트 " + chapter, "owner", "소유자", 0, "t0", "t0");
+      note.run("inherited-" + chapter, id, "owner", "소유자", "공유 묵상 " + chapter, 0, 0, "inherit", null, "t1");
+      note.run("private-" + chapter, id, "owner", "소유자", "비공개 묵상 " + chapter, 0, 0, "private", null, "t2");
+    }
+  }
   return { sqlite, d };
 }
 
@@ -118,4 +126,61 @@ test("editing, making an owned note private, and deleting it affect only its syn
   assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE sync_key='inherited'"), 0);
   assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE id='collaborator-note'"), 1);
   assert.equal(copied.length, groupIds.length);
+});
+
+test("all-chapter sync pages through every chapter once, rejects invalid targets/cursors, and keeps private notes out", async () => {
+  const { sqlite, d } = setup("private", "owner", 18);
+  assert.deepEqual(await syncAllChapters(d, "owner", ["bad-group"], ["friend-a"], false, ""), { error: "invalid_share_targets" });
+  assert.deepEqual(await syncAllChapters(d, "owner", ["group-a"], ["bad-friend"], false, ""), { error: "invalid_share_targets" });
+  assert.deepEqual(await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, "not-a-owned-chapter"), { error: "invalid_cursor" });
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters"), 18);
+  const pages: number[] = [], cursors: string[] = []; let cursor = "";
+  for (;;) { const result = await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, cursor); assert.equal(result.ok, true); pages.push(result.processed!); cursors.push(result.cursor!); cursor = result.cursor!; if (result.done) break; }
+  assert.deepEqual(pages, [8, 8, 2]);
+  assert.deepEqual(cursors, ["source-07", "source-15", "source-17"]);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='private'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='inherit'"), 55);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE body LIKE '비공개 묵상%' AND id NOT LIKE 'private-%'"), 0);
+});
+test("repeating a page is idempotent and a failed page safely resumes from its last completed cursor", async () => {
+  const { sqlite, d } = setup("private", "owner", 18);
+  const first = await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, "");
+  const duplicateFirst = await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, "");
+  assert.deepEqual(duplicateFirst, first);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 8);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 8);
+  (globalThis as any).__failSyncChapter = "source-10";
+  await assert.rejects(syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, first.cursor!), /injected chapter failure/);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 10);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 10);
+  const retry = await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, first.cursor!);
+  assert.deepEqual({ processed: retry.processed, done: retry.done, cursor: retry.cursor }, { processed: 8, done: false, cursor: "source-15" });
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 16);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 16);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='private'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='inherit'"), 51);
+  const last = await syncAllChapters(d, "owner", ["group-a"], ["friend-a"], false, retry.cursor!);
+  assert.deepEqual({ processed: last.processed, done: last.done }, { processed: 2, done: true });
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='friends'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='private'"), 18);
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_meditations WHERE visibility='inherit'"), 55);
+});
+
+test("syncAllChapters POST action applies target validation and returns the batch cursor", async () => {
+  const { sqlite } = setup("private", "owner", 9);
+  const request = (data: unknown) => new Request("https://prayer.test/api/scripture-notes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const good = await POST(request({ action: "syncAllChapters", scopeType: "private", scopeId: "owner", groupIds: ["group-a"], friendIds: ["friend-a"] }));
+  assert.equal(good.status, 200);
+  assert.deepEqual(good.data, { ok: true, processed: 8, cursor: "source-07", done: false });
+  const bad = await POST(request({ action: "syncAllChapters", scopeType: "private", groupIds: ["not-a-member"], friendIds: [] }));
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.data, { error: "invalid_share_targets" });
+  assert.equal(count(sqlite, "SELECT COUNT(*) AS n FROM scripture_chapters WHERE scope_type='group'"), 8);
 });
